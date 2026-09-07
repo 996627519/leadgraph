@@ -27,11 +27,11 @@ def target_parser_node(state: LeadGraphState):
         """
         )
     ]
-    result = structured_llm.invoke(message)
+    result = structured_llm.invoke(message)["parsed"]
     print("===============================target_parser_node处理完毕===============================")
     print(result)
     return {
-        "target_parser_content": result
+        "target_profile": result
     }
 
 

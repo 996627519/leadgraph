@@ -28,7 +28,7 @@ def company_planner(state: LeadGraphState):
         """
         )
     ]
-    result = structured_deepseek.invoke(message)
+    result = structured_deepseek.invoke(message)["parsed"]
     print("===============================company_planner处理完毕===============================")
     print(result)
     return {

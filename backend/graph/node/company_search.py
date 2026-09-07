@@ -14,7 +14,7 @@ from states.company_graph_state import SearchResult
 async def company_search(state: CompanySearchWorkerState):
     print("进入company_search")
     task = state["task"]
-    response = await tavily_search(task["query"])
+    response = await tavily_search(task.query)
     results = []
     for item in response.get("results", []):
         results.append(
@@ -26,6 +26,7 @@ async def company_search(state: CompanySearchWorkerState):
             )
         )
     print("===============================company_search处理完毕===============================")
+    print(results)
     return {
         "search_results": results
     }

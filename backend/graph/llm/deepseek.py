@@ -24,5 +24,5 @@ def get_deepseek():
     return llm
 
 def get_structured_deepseek(class_type):
-    structured_llm = get_deepseek().with_structured_output(class_type)
+    structured_llm = get_deepseek().with_structured_output(class_type, include_raw=True)
     return structured_llm
