@@ -18,6 +18,10 @@ from backend.graph.node.company_score import company_score
 from backend.graph.company_graph import get_company_graph
 from backend.graph.router.router import send_company_work
 from backend.graph.router.router import send_company_score
+from backend.graph.node.company_rank import company_rank
+from backend.graph.node.person_planner import person_planner
+from backend.graph.person_graph import get_person_graph
+from backend.graph.router.router import send_person_work
 
 
 def create_graph(checkpointer):
@@ -36,6 +40,9 @@ def create_graph(checkpointer):
     # 公司搜索提取子图
     company_work = get_company_graph()
 
+    # 人员搜索和提取子图
+    person_work = get_person_graph()
+
     builder_main.add_node(
         "company_work",
         company_work
@@ -49,6 +56,21 @@ def create_graph(checkpointer):
     builder_main.add_node(
         "company_score",
         company_score
+    )
+
+    builder_main.add_node(
+        "company_rank",
+        company_rank
+    )
+
+    builder_main.add_node(
+        "person_planner",
+        person_planner
+    )
+
+    builder_main.add_node(
+        "person_work",
+        person_work
     )
 
     builder_main.add_edge(
@@ -78,6 +100,21 @@ def create_graph(checkpointer):
 
     builder_main.add_edge(
         "company_score",
+        "company_rank"
+    )
+
+    builder_main.add_edge(
+        "company_rank",
+        "person_planner"
+    )
+
+    builder_main.add_conditional_edges(
+        "person_planner",
+        send_person_work
+    )
+    
+    builder_main.add_edge(
+        "person_planner",
         END
     )
 

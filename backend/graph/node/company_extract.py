@@ -7,7 +7,7 @@
 @Date ：2026-09-05 16:09 
 """
 from backend.graph.states.company_graph_state import CompanySearchWorkerState, CompanyCandidate, CompanyCandidateList
-from backend.graph.prompts.graph_prompts import company_extract_prompts
+from backend.graph.prompts.company_prompts import company_extract_prompts
 from backend.graph.llm.deepseek import get_structured_deepseek
 from langchain_core.messages import SystemMessage, HumanMessage
 

@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pathlib import Path
 from typing import Optional
+from backend.graph.utils.person_utils import parse_tavily_results
 
 current_dir = Path(__file__).parent
 env_path = current_dir/'..'/'config'/ '.env'
@@ -55,14 +56,16 @@ async def init_tavily_client():
             print("服务器已连接")
 
 
-async def tavily_search(query):
+async def tavily_search(query, max_results=5, search_depth="basic"):
     if "search" not in tools:
         await init_tavily_client()
     print(f"准备调用工具: {tools["search"].name}")
     print(f"搜索内容: {query}")
     result = await tools["search"].ainvoke(
         {
-            "query": query
+            "query": query,
+            "max_results": max_results,
+            "search_depth": search_depth
         }
     )
     print("\n========== 搜索完成 ==========\n")
@@ -90,6 +93,10 @@ async def tavily_search(query):
 
 
 if __name__ == "__main__":
-    asyncio.run(
+    result = asyncio.run(
         tavily_search("喝牛奶的好处")
     )
+    print(type(result))
+    result = parse_tavily_results(result)
+    print(type(result))
+    print(result)

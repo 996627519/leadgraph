@@ -8,7 +8,7 @@
 """
 from backend.graph.states.company_score_state import CompanyScore, CompanyScoreState
 from backend.graph.llm.deepseek import get_structured_deepseek
-from backend.graph.prompts.graph_prompts import company_score_prompt
+from backend.graph.prompts.company_prompts import company_score_prompt
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.graph.utils.company_utils import calculate_company_score, get_company_recommendation
 from backend.graph.error.error_handle import invoke_structured_with_retry

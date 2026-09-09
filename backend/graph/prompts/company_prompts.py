@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 """
 @Project ：leadgraph 
-@File ：graph_prompts.py
+@File ：company_prompts.py
 @Author ：zlh
 @Date ：2026-09-05 13:27 
 """

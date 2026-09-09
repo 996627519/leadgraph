@@ -9,8 +9,10 @@
 from backend.graph.states.lead_graph_state import LeadGraphState
 from backend.graph.llm.deepseek import get_structured_deepseek
 from backend.graph.states.company_search_task import CompanySearchPlan
-from backend.graph.prompts.graph_prompts import company_planner_prompts
+from backend.graph.prompts.company_prompts import company_planner_prompts
 from langchain_core.messages import SystemMessage, HumanMessage
+
+from backend.graph.error.error_handle import invoke_structured_with_retry
 
 
 def company_planner(state: LeadGraphState):
@@ -28,7 +30,11 @@ def company_planner(state: LeadGraphState):
         """
         )
     ]
-    result = structured_deepseek.invoke(message)["parsed"]
+    try:
+        result = structured_deepseek.invoke(message)["parsed"]
+    except Exception as e:
+        # 失败重试
+        result = invoke_structured_with_retry(structured_deepseek, CompanySearchPlan, message)
     print("===============================company_planner处理完毕===============================")
     print(result)
     return {

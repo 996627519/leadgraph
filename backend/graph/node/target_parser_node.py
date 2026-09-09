@@ -8,7 +8,7 @@
 """
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.graph.states.lead_graph_state import LeadGraphState
-from backend.graph.prompts.graph_prompts import target_parser_prompts
+from backend.graph.prompts.company_prompts import target_parser_prompts
 from backend.graph.llm.deepseek import get_structured_deepseek
 from backend.graph.states.target_profile import TargetProfile
 

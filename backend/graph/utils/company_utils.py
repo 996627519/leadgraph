@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import re
 from backend.graph.states.company_graph_state import NormalizedCompany, CompanyCandidate, CompanyEvidence, MergedCompany
 from backend.graph.states.company_score_state import CompanyScore
+from backend.graph.states.ranked_company import RankedCompany
 from collections import defaultdict
 from urllib.parse import (
     urlsplit,
@@ -18,6 +19,14 @@ from urllib.parse import (
     parse_qsl,
     urlencode
 )
+import os
+import configparser
+
+config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'config', 'config.ini')
+config = configparser.ConfigParser()
+config.read(config_path, encoding='utf-8')
+
+
 
 LEGAL_SUFFIXES = {
     "llc",
@@ -482,3 +491,60 @@ def get_company_recommendation(score: int, hard_constraint_pass: bool, confidenc
         return "medium"
 
     return "low"
+
+
+# 公司排名
+def rank_company(scored_companies: list[CompanyScore]) -> list[RankedCompany]:
+    # MIN_SCORE = config.getint("company", "MIN_SCORE")
+    # MIN_CONFIDENCE = config.getfloat("company", "MIN_CONFIDENCE")
+    MAX_COMPANIES = config.getint("company", "MAX_COMPANIES")
+    print("进入rank company，开始计算排名")
+    high = [
+        x for x in scored_companies
+        if x.recommendation == "high"
+    ]
+
+    medium = [
+        x for x in scored_companies
+        if x.recommendation == "medium"
+    ]
+
+    high.sort(
+        key=lambda x: (
+            x.total_score,
+            x.confidence
+        ),
+        reverse=True
+    )
+
+    medium.sort(
+        key=lambda x: (
+            x.total_score,
+            x.confidence
+        ),
+        reverse=True
+    )
+
+    selected = high[:15]
+
+    remaining = MAX_COMPANIES - len(selected)
+
+    if remaining > 0:
+        selected.extend(
+            medium[:remaining]
+        )
+    print("==========================selected==========================")
+    print(selected)
+    ranked = [
+        RankedCompany(
+            rank=index,
+            scored_company=company
+        )
+        for index, company
+        in enumerate(
+            selected,
+            start=1
+        )
+    ]
+
+    return ranked

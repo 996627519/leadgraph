@@ -22,3 +22,8 @@ def send_company_score(state: LeadGraphState):
         )
         for company in state["merged_company"]
     ]
+
+
+# 分发根据公司搜索和提取人员信息
+def send_person_work(state: LeadGraphState):
+    return [Send("person_work", {"task": task}) for task in state["person_search_tasks"].tasks]
