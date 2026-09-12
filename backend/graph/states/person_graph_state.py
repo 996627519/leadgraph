@@ -10,7 +10,7 @@ from typing import TypedDict, Annotated
 from pydantic import BaseModel, Field
 from typing import Literal
 from operator import add
-
+from backend.graph.states.search_result import SearchResult, WorkerError
 from backend.graph.states.person_search_state import PersonSearchTask
 
 
@@ -52,17 +52,11 @@ class LeadCandidate(BaseModel):
     strategy_type: str | None = None
 
 
-class SearchResult(BaseModel):
-    task_id: str | None = None
-    title: str
-    url: str
-    snippet: str
-    domain: str | None = None
-    provider: str | None = None
-    score: float | None = None
 
 
-class PersonSearchWorkerState(TypedDict):
+class PersonSearchWorkerState(TypedDict, total=False):
+    run_id: str
+    errors: Annotated[list[WorkerError], add]
     task: PersonSearchTask
 
     search_results: list[SearchResult]

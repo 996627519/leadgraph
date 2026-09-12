@@ -6,51 +6,34 @@
 @Author ：zlh
 @Date ：2026-09-05 20:34 
 """
+from collections import defaultdict
 from langgraph.types import Send
-from backend.graph.states.lead_graph_state import LeadGraphState
-from backend.graph.states.person_enrichment_state import LeadEnrichmentWorkerState
 from backend.graph.utils.person_utils import find_target_company
 
+# 并行company搜索和提取子图，根据target_profile的company_search_plan.tasks
+def send_company_work(state):
+    if state.get('status') == 'failed':
+        return 'finalize'
+    tasks = state['company_search_plan'].tasks
+    return [Send('company_work', {'task': t, 'run_id': state['run_id']}) for t in tasks] or 'finalize'
 
-# 分发公司搜索和公司信息提取
-def send_company_work(state: LeadGraphState):
-    return [Send("company_work", {"task": task}) for task in state["company_search_plan"].tasks]
+# 并行企业打分node，根据company字段分发
+def send_company_score(state):
+    return [Send('company_score', {'company': c, 'target_profile': state['target_profile']})
+            for c in state.get('merged_company', [])] or 'finalize'
 
-# 分发公司打分node
-def send_company_score(state: LeadGraphState):
-    return [
-        Send(
-            "company_score",
-            {"target_profile": state["target_profile"], "company": company}
-        )
-        for company in state["merged_company"]
-    ]
+# 并行person搜索和提取子图，根据person_search_task.tasks
+def send_person_work(state):
+    if state.get('status') == 'failed':
+        return 'finalize'
+    groups = defaultdict(list)
+    for task in state['person_search_tasks'].tasks:
+        groups[task.company_name].append(task)
+    return [Send('person_work', {'tasks': tasks, 'run_id': state['run_id']})
+            for _, tasks in sorted(groups.items())] or 'finalize'
 
-
-# 分发根据公司搜索和提取人员信息
-def send_person_work(state: LeadGraphState):
-    return [Send("person_work", {"task": task}) for task in state["person_search_tasks"].tasks]
-
-# 分发合并后的候选人给enrich
-def send_person_enrichment(state: LeadGraphState):
-    return [Send(
-            "enrichment_work",
-            {
-                "lead": lead,
-                "target_profile": state["target_profile"],
-                "target_company": find_target_company(lead, state)
-            }
-        )
-        for lead
-        in state["merged_leads"]]
-
-# 分发enrich搜索任务
-def send_enrichment_search(state: LeadEnrichmentWorkerState):
-    return [Send("enrichment_search", {"search_query": search_query}) for search_query in state["search_queries"]]
-
-
-def route_search_need(state: LeadEnrichmentWorkerState):
-    if state["needs_search"]:
-        return "build_query"
-
-    return "enrichment_analyze"
+# 并行person信息补充，根据selected_leads
+def send_person_enrichment(state):
+    return [Send('enrichment_work', {'lead': lead, 'target_profile': state['target_profile'],
+            'target_company': find_target_company(lead, state), 'run_id': state['run_id']})
+            for lead in state.get('selected_leads', [])] or 'finalize'
