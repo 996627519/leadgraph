@@ -6,545 +6,134 @@
 @Author ：zlh
 @Date ：2026-09-05 21:13 
 """
-from typing import Optional
-from urllib.parse import urlparse
 import re
-from backend.graph.states.company_graph_state import NormalizedCompany, CompanyCandidate, CompanyEvidence, MergedCompany
-from backend.graph.states.company_score_state import CompanyScore
+from urllib.parse import urlsplit
+from backend.config.settings import Settings
+from backend.graph.states.company_graph_state import NormalizedCompany, MergedCompany
 from backend.graph.states.ranked_company import RankedCompany
-from collections import defaultdict
-from urllib.parse import (
-    urlsplit,
-    urlunsplit,
-    parse_qsl,
-    urlencode
-)
-import os
-import configparser
+from backend.graph.utils.evidence import canonical_url, unique_strings, normalize_location
 
-config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'config', 'config.ini')
-config = configparser.ConfigParser()
-config.read(config_path, encoding='utf-8')
+LEGAL_SUFFIXES = {'llc', 'inc', 'incorporated', 'corp', 'corporation', 'ltd', 'limited', 'co', 'company', 'plc'}
 
-
-
-LEGAL_SUFFIXES = {
-    "llc",
-    "inc",
-    "incorporated",
-    "corp",
-    "corporation",
-    "ltd",
-    "limited",
-    "co",
-    "company",
-    "plc",
-}
-
-TRACKING_PARAMS = {
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "gclid",
-    "fbclid",
-}
-
-
-
-
-def normalize_company_name(name: str) -> str:
-    if not name:
-        return ""
-
-    # Unicode 友好的小写
-    value = name.casefold().strip()
-
-    # 标点变空格
-    value = re.sub(
-        r"[^\w\s]",
-        " ",
-        value
-    )
-
-    words = value.split()
-
-    # 只从末尾移除公司法律后缀
+# 标准化公司名称
+def normalize_company_name(name):
+    words = re.sub(r'[^\w\s]', ' ', (name or '').casefold()).split()
     while words and words[-1] in LEGAL_SUFFIXES:
         words.pop()
+    return ' '.join(words)
 
-    return " ".join(words)
-
-
-# 用于生成domain字段
-def resolve_company_domain(company: CompanyCandidate) -> str | None:
-    # website 是优先来源
-    website_domain = normalize_domain(
-        company.website
-    )
-
-    if website_domain:
-        return website_domain
-
-    # 没有 website 才考虑已有 domain
-    return normalize_domain(
-        company.domain
-    )
-
-
-# 网站转换为域名
-def normalize_domain(value: str | None) -> str | None:
-    if not value:
+def normalize_domain(value):
+    if not value or not value.strip():
         return None
+    value = value.strip()
+    url = canonical_url(value if '://' in value else 'https://' + value)
+    return urlsplit(url).hostname.removeprefix('www.') if url else None
 
-    value = value.strip().lower()
+def resolve_company_domain(company):
+    return normalize_domain(company.website) or normalize_domain(company.domain)
 
-    if not value:
-        return None
+def normalize_evidence_url(url):
+    return canonical_url(url)
 
-    if "://" not in value:
-        value = "https://" + value
+# 规范化company字段
+def normalize_candidate(company):
+    return NormalizedCompany(original=company, normalized_name=normalize_company_name(company.name),
+        normalized_domain=resolve_company_domain(company), normalized_location=normalize_location(company.location))
 
-    parsed = urlparse(value)
+def get_group_domains(group):
+    return {x.normalized_domain for x in group if x.normalized_domain}
 
-    domain = parsed.hostname
+def get_group_names(group):
+    return {x.normalized_name for x in group if x.normalized_name}
 
-    if not domain:
-        return None
-
-    if domain.startswith("www."):
-        domain = domain[4:]
-
-    return domain
-
-# 用于合并之后去重
-def normalize_location(location: str | None) -> str | None:
-    if not location:
-        return None
-
-    value = location.casefold().strip()
-
-    value = re.sub(
-        r"\s+",
-        " ",
-        value
-    )
-
-    return value or None
-
-
-# 将companycandidate转换为作比较的NormalizedCompany
-def normalize_candidate(company: CompanyCandidate) -> NormalizedCompany:
-    return NormalizedCompany(
-        original=company,
-
-        normalized_name=
-            normalize_company_name(
-                company.name
-            ),
-
-        normalized_domain=
-            resolve_company_domain(
-                company
-            ),
-
-        normalized_location=
-            normalize_location(
-                company.location
-            ),
-    )
-
-
-# 根据domain分组，用于比较
-def get_group_domains(group: list[NormalizedCompany]) -> set[str]:
-
-    return {
-        item.normalized_domain
-        for item in group
-        if item.normalized_domain
-    }
-
-
-# 根据name分组，用于比较
-def get_group_names(group: list[NormalizedCompany]) -> set[str]:
-
-    return {
-        item.normalized_name
-        for item in group
-        if item.normalized_name
-    }
-
-
-def find_matching_group(company: NormalizedCompany, groups: list[list[NormalizedCompany]]) -> int | None:
-
-    # 1. 有 domain：优先 domain
+def find_matching_group(company, groups):
     if company.normalized_domain:
-        domain_matches = []
-        for index, group in enumerate(groups):
-            domains = get_group_domains(group)
-            if (company.normalized_domain in domains):
-                domain_matches.append(index)
+        matches = [i for i, g in enumerate(groups) if company.normalized_domain in get_group_domains(g)]
+        if len(matches) == 1:
+            return matches[0]
+        matches = [i for i, g in enumerate(groups) if not get_group_domains(g) and company.normalized_name in get_group_names(g)]
+    else:
+        matches = [i for i, g in enumerate(groups) if company.normalized_name in get_group_names(g)]
+    return matches[0] if len(matches) == 1 else None
 
-        if len(domain_matches) == 1:
-            return domain_matches[0]
-
-        # domain 没命中时：
-        # 只允许和“还没有 domain”的同名组进行匹配
-        name_matches = []
-
-        for index, group in enumerate(groups):
-            domains = get_group_domains(group)
-            names = get_group_names(group)
-
-            if domains:
-                continue
-
-            if (company.normalized_name in names):
-                name_matches.append(index)
-
-        if len(name_matches) == 1:
-            return name_matches[0]
-
-        return None
-
-    # 2. 当前公司没有 domain
-    name_matches = []
-
-    for index, group in enumerate(groups):
-        names = get_group_names(group)
-        if (company.normalized_name in names):
-            name_matches.append(index)
-
-    # 只有唯一匹配时才合并
-    if len(name_matches) == 1:
-        return name_matches[0]
-
-    # 两个不同 domain 的公司名字都一样
-    # → 无法判断
-    # → 保持独立
-    return None
-
-
-# 聚合相同公司
-def group_company_candidates(companies: list[NormalizedCompany]) -> list[list[NormalizedCompany]]:
-    groups: list[list[NormalizedCompany]] = []
-
-    for company in companies:
-        group_index = find_matching_group(company, groups)
-        if group_index is None:
+# 同一家公司合并
+def group_company_candidates(companies):
+    groups = []
+    for company in sorted(companies, key=lambda x: (not bool(x.normalized_domain), x.normalized_domain or '', x.normalized_name)):
+        index = find_matching_group(company, groups)
+        if index is None:
             groups.append([company])
         else:
-            groups[group_index].append(company)
+            groups[index].append(company)
     return groups
 
-
-# 通用字符串去重
-def unique_strings(values: list[str | None]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-
-    for value in values:
-        if not value:
-            continue
-
-        value = value.strip()
-        if not value:
-            continue
-
-        key = value.casefold()
-        if key in seen:
-            continue
-
-        seen.add(key)
-        result.append(value)
+def deduplicate_evidence(evidences):
+    result, seen = [], set()
+    for item in evidences:
+        key = (canonical_url(item.url), ' '.join(item.snippet.casefold().split()))
+        if key[0] and key not in seen:
+            seen.add(key)
+            result.append(item)
     return result
 
-# 统一化url
-def normalize_evidence_url(url: str) -> str:
-    url = url.strip()
+def choose_best_name(companies):
+    return max(companies, key=lambda c: (bool(c.website), len(c.name.strip()), c.name)).name.strip()
 
-    parts = urlsplit(url)
+def choose_best_website(companies):
+    websites = [canonical_url(c.website) for c in companies if canonical_url(c.website)]
+    return min(websites, key=lambda url: (len(url), url)) if websites else None
 
-    query_params = [
-        (key, value)
-        for key, value
-        in parse_qsl(
-            parts.query,
-            keep_blank_values=True
-        )
-        if key.lower()
-        not in TRACKING_PARAMS
-    ]
+# 将一组company合并为一组
+def aggregate_company_group(group):
+    companies = [x.original for x in group]
+    domains = sorted(get_group_domains(group))
+    return MergedCompany(name=choose_best_name(companies), website=choose_best_website(companies),
+        domain=domains[0] if len(domains)==1 else None,
+        locations=unique_strings([c.location for c in companies]),
+        descriptions=unique_strings([c.description for c in companies]),
+        matched_reasons=unique_strings([c.matched_reason for c in companies]),
+        evidence=deduplicate_evidence([e for c in companies for e in c.evidence]), discovery_count=len(companies))
 
-    path = parts.path.rstrip("/")
-
-    return urlunsplit((
-        parts.scheme.lower(),
-        parts.netloc.lower(),
-        path,
-        urlencode(query_params),
-        ""  # 去 fragment
-    ))
-
-
-# evidence去重
-def deduplicate_evidence(evidences: list[CompanyEvidence]) -> list[CompanyEvidence]:
-
-    result: list[CompanyEvidence] = []
-
-    seen: set[tuple[str, str]] = set()
-
-    for evidence in evidences:
-
-        normalized_url = (
-            normalize_evidence_url(
-                evidence.url
-            )
-        )
-
-        normalized_snippet = (
-            " ".join(
-                evidence.snippet
-                .casefold()
-                .split()
-            )
-        )
-
-        key = (normalized_url, normalized_snippet)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        result.append(evidence)
-
-    return result
-
-
-# 最终公司名选择
-def choose_best_name(companies: list[CompanyCandidate]) -> str:
-    best = max(
-        companies,
-        key=lambda c: (
-            bool(c.website),
-            len(c.name.strip())
-        )
-    )
-
-    return best.name.strip()
-
-# 选择website
-def choose_best_website(companies: list[CompanyCandidate]) -> str | None:
-    websites = [
-        company.website.strip()
-        for company in companies
-        if company.website
-        and company.website.strip()
-    ]
-
-    if not websites:
-        return None
-
-    # 越短通常越接近官网根地址
-    return min(
-        websites,
-        key=len
-    )
-
-# 合并group
-def aggregate_company_group(group: list[NormalizedCompany]) -> MergedCompany:
-    companies = [
-        item.original
-        for item in group
-    ]
-
-    # name
-    name = choose_best_name(
-        companies
-    )
-
-    # website
-    website = choose_best_website(
-        companies
-    )
-
-    # domain
-    domains = unique_strings([
-        item.normalized_domain
-        for item in group
-    ])
-
-    # 正常情况下同一个 group
-    # 最多只有一个真实 domain
-    domain = (
-        domains[0]
-        if len(domains) == 1
-        else None
-    )
-
-    # location
-    locations = unique_strings([
-        company.location
-        for company in companies
-    ])
-
-    # description
-    descriptions = unique_strings([
-        company.description
-        for company in companies
-    ])
-
-    # matched_reason
-    matched_reasons = unique_strings([
-        company.matched_reason
-        for company in companies
-    ])
-
-    # evidence
-    all_evidence = []
-
-    for company in companies:
-        all_evidence.extend(
-            company.evidence
-        )
-
-    evidence = deduplicate_evidence(all_evidence)
-
-    return MergedCompany(
-        name=name,
-        website=website,
-        domain=domain,
-        locations=locations,
-        descriptions=descriptions,
-        matched_reasons=matched_reasons,
-        evidence=evidence,
-        discovery_count=len(companies)
-    )
-
-# 过滤None
-def remove_none_companies(candidates: list[CompanyCandidate]) -> list[CompanyCandidate]:
-    if not candidates:
-        return []
-    result: list[CompanyCandidate] = []
-    for candidate in candidates:
-        if candidate is not None:
-            result.append(candidate)
-    return result
-
+# 去除none/空字符
+def remove_none_companies(candidates):
+    return [c for c in candidates or [] if c is not None and c.name.strip()]
 
 # 合并公司
-def merge_companies(candidates: list[CompanyCandidate]) -> list[MergedCompany]:
-    print("开始去重合并公司")
-    print(candidates)
-    if not candidates:
-        return []
+def merge_companies(candidates):
+    normalized = [normalize_candidate(c) for c in remove_none_companies(candidates)]
+    return [aggregate_company_group(g) for g in group_company_candidates(normalized)]
 
-    candidates = remove_none_companies(candidates)
-
-    # STEP 1: Normalize
-    normalized = [
-        normalize_candidate(candidate)
-        for candidate in candidates
+# 公司打分
+def calculate_company_score(assessment, target_profile=None):
+    dimensions = [
+        ('industry_fit', .25, 'industries'),
+        ('company_type_fit', .25, 'company_types'),
+        ('geography_fit', .15, 'countries'),
+        ('capability_fit', .25, 'keywords'),
+        ('company_size_fit', .10, 'company_size_min')
     ]
+    active = []
+    for field, weight, requirement in dimensions:
+        enabled = target_profile is None or bool(getattr(target_profile, requirement))
+        if target_profile is not None and field == 'geography_fit':
+            enabled = bool(target_profile.countries or target_profile.regions)
+        if target_profile is not None and field == 'company_size_fit':
+            enabled = target_profile.company_size_min is not None or target_profile.company_size_max is not None
+        if enabled:
+            active.append((getattr(assessment, field).score, weight))
+    return round(sum(score * weight for score, weight in active) / sum(w for _, w in active)) if active else 0
 
-    # STEP 2: Deduplicate
-    groups = group_company_candidates(
-        normalized
-    )
-
-    # STEP 3: Aggregate
-    merged_companies = [
-        aggregate_company_group(group)
-        for group in groups
-    ]
-
-    return merged_companies
-
-
-# 计算公司的得分
-def calculate_company_score(assessment: CompanyScore) -> int:
-    print("进入打分")
-    print(assessment)
-    score = (
-        assessment.industry_fit.score * 0.25
-        + assessment.company_type_fit.score * 0.25
-        + assessment.geography_fit.score * 0.15
-        + assessment.capability_fit.score * 0.25
-        + assessment.company_size_fit.score * 0.10
-    )
-
-    return round(score)
-
-
-# 公司的推荐程度
-def get_company_recommendation(score: int, hard_constraint_pass: bool, confidence: float) -> str:
-
+def get_company_recommendation(score, hard_constraint_pass, confidence):
     if not hard_constraint_pass:
-        return "reject"
+        return 'reject'
+    if confidence < .5:
+        return 'low'
+    return 'high' if score >= 80 else 'medium' if score >= 60 else 'low'
 
-    if score >= 80:
-        return "high"
-
-    if score >= 60:
-        return "medium"
-
-    return "low"
-
-
-# 公司排名
-def rank_company(scored_companies: list[CompanyScore]) -> list[RankedCompany]:
-    # MIN_SCORE = config.getint("company", "MIN_SCORE")
-    # MIN_CONFIDENCE = config.getfloat("company", "MIN_CONFIDENCE")
-    MAX_COMPANIES = config.getint("company", "MAX_COMPANIES")
-    print("进入rank company，开始计算排名")
-    high = [
-        x for x in scored_companies
-        if x.recommendation == "high"
-    ]
-
-    medium = [
-        x for x in scored_companies
-        if x.recommendation == "medium"
-    ]
-
-    high.sort(
-        key=lambda x: (
-            x.total_score,
-            x.confidence
-        ),
-        reverse=True
-    )
-
-    medium.sort(
-        key=lambda x: (
-            x.total_score,
-            x.confidence
-        ),
-        reverse=True
-    )
-
-    selected = high[:15]
-
-    remaining = MAX_COMPANIES - len(selected)
-
-    if remaining > 0:
-        selected.extend(
-            medium[:remaining]
-        )
-    print("==========================selected==========================")
-    print(selected)
-    ranked = [
-        RankedCompany(
-            rank=index,
-            scored_company=company
-        )
-        for index, company
-        in enumerate(
-            selected,
-            start=1
-        )
-    ]
-
-    return ranked
+# 公司符合度排名
+def rank_company(scored_companies, max_companies=None, min_score=60, min_confidence=.5):
+    if max_companies is None:
+        max_companies = Settings.from_ini().max_companies
+    eligible = [x for x in scored_companies if x.hard_constraint_pass and x.total_score >= min_score and x.confidence >= min_confidence]
+    selected = sorted(eligible, key=lambda x: (-x.total_score, -x.confidence, x.company.domain or '', x.company.name.casefold()))[:max_companies]
+    return [RankedCompany(rank=i, scored_company=c) for i, c in enumerate(selected, 1)]

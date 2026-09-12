@@ -6,40 +6,29 @@
 @Author ：zlh
 @Date ：2026-09-05 13:44 
 """
-from backend.graph.states.lead_graph_state import LeadGraphState
-from backend.graph.llm.deepseek import get_structured_deepseek
 from backend.graph.states.company_search_task import CompanySearchPlan
 from backend.graph.prompts.company_prompts import company_planner_prompts
-from langchain_core.messages import SystemMessage, HumanMessage
+from backend.graph.node.common import messages, stable_id
+import logging
+logger = logging.getLogger(__name__)
 
-from backend.graph.error.error_handle import invoke_structured_with_retry
-
-
-def company_planner(state: LeadGraphState):
-    print("进入company_planner")
-    target_profile = state["target_profile"]
-    structured_deepseek = get_structured_deepseek(CompanySearchPlan)
-    message =[
-        SystemMessage(
-            content=company_planner_prompts
-        ),
-        HumanMessage(
-            content=f"""
-        经处理过后的target_profile如下:
-        {target_profile}
-        """
-        )
-    ]
-    try:
-        result = structured_deepseek.invoke(message)["parsed"]
-    except Exception as e:
-        # 失败重试
-        result = invoke_structured_with_retry(structured_deepseek, CompanySearchPlan, message)
-    print("===============================company_planner处理完毕===============================")
-    print(result)
-    return {
-        "company_search_plan": result
-    }
+async def company_planner(state, services):
+    logger.info("进入company_planner")
+    limit = services.settings.max_company_searches
+    if not limit:
+        return {'company_search_plan': CompanySearchPlan(tasks=[])}
+    plan = await services.model.generate(CompanySearchPlan, messages(company_planner_prompts, target_profile=state['target_profile'], max_tasks=limit))
+    seen, tasks = set(), []
+    # 清洗排序去重
+    for task in sorted(plan.tasks, key=lambda t: (-t.priority, t.query)):
+        query = ' '.join(task.query.split())
+        if query and query.casefold() not in seen:
+            seen.add(query.casefold())
+            tasks.append(task.model_copy(update={'id': stable_id('company', query), 'query': query}))
+    result = CompanySearchPlan(tasks=tasks[:limit])
+    logger.info("========================================company_planner处理完毕========================================")
+    logger.info(result)
+    return {'company_search_plan': result}
 
 
 

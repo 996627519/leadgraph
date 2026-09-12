@@ -6,36 +6,17 @@
 @Author ：zlh
 @Date ：2026-09-08 16:06 
 """
-from backend.service.search_service import tavily_search
-from backend.graph.states.person_graph_state import PersonSearchWorkerState
-from states.company_graph_state import SearchResult
-from backend.graph.utils.person_utils import clean_search_results, parse_tavily_results
+from backend.graph.utils.evidence import parse_tavily_results
+import logging
+logger = logging.getLogger(__name__)
 
 
-async def person_search(state: PersonSearchWorkerState):
-    print("进入person_search")
-    task = state["task"]
-    max_results_map = {
-        "exact_role_search": 5,
-        "role_family_search": 8,
-        "company_team_search": 10,
-        "project_people_search": 10
-    }
-
-    max_results = max_results_map.get(
-        task.strategy_type,
-        5
-    )
-    results = await tavily_search(
-        query=task.query,
-        max_results=max_results,
-        search_depth="advanced"
-    )
-
-    results = parse_tavily_results(results)
-    results = clean_search_results(results)
-    print("===============================person_search处理完毕===============================")
-    print(results)
-    return {
-        "search_results": results
-    }
+async def person_search(state, services):
+    logger.info("进入person_planner")
+    task = state['task']
+    count = {'exact_role_search': 5, 'role_family_search': 8, 'company_team_search': 10, 'project_people_search': 10}.get(task.strategy_type, 5)
+    response = await services.search.search(task.query, run_id=state['run_id'], stage='person', max_results=count)
+    result = parse_tavily_results(response, task.id)
+    print("===============================person_planner处理完毕===============================")
+    print(result)
+    return {'search_results': result}

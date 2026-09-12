@@ -6,23 +6,25 @@
 @Author ：zlh
 @Date ：2026-07-18 12:36 
 """
-from langchain_deepseek import ChatDeepSeek
 import os
-from dotenv import load_dotenv
 from pathlib import Path
+from dotenv import load_dotenv
+from backend.service.errors import ModelError
+from langchain_deepseek import ChatDeepSeek
 
-current_dir = Path(__file__).parent
-env_path = current_dir/'..'/'..'/'config'/ '.env'
-load_dotenv(env_path)
-def get_deepseek():
-    llm = ChatDeepSeek(
-                model="deepseek-v4-flash",
-                api_key=os.environ.get("deepseek_api_key"),  # 从 platform.deepseek.com 获取
-                extra_body={"thinking": {"type": "disabled"}}, #如果使用langchain的with_structured方法则不能开启思考模式
-                max_retries=2
-            )
-    return llm
+load_dotenv(Path(__file__).parents[2] / 'config' / '.env')
+
+def get_deepseek(timeout=60):
+    key = os.getenv('DEEPSEEK_API_KEY') or os.getenv('deepseek_api_key')
+    if not key:
+        raise ModelError('未找到deepseek api key')
+    return ChatDeepSeek(
+        model=os.getenv('DEEPSEEK_MODEL', 'deepseek-v4-flash'),
+        api_key=key,
+        max_retries=0,
+        timeout=timeout
+    )
+
 
 def get_structured_deepseek(class_type):
-    structured_llm = get_deepseek().with_structured_output(class_type, include_raw=True)
-    return structured_llm
+    return get_deepseek().with_structured_output(class_type, include_raw=True)

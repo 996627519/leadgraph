@@ -13,25 +13,13 @@ from backend.graph.error.exception import StructuredOutputRetryError
 
 
 # llm结构化输出错误，尝试重试
-def invoke_structured_with_retry(llm, schema, messages, max_attempts: int = 3):
-    print("进入重试机制")
-    last_error = None
-    last_raw_output = None
-    for attempt in range(1, max_attempts + 1):
-        print(f"第 {attempt} 次重试")
-        result = llm.invoke(messages)
-        if result["parsed"] is not None and result["parsing_error"] is None:
-            return result["parsed"]
-        parsing_error  = result["parsing_error"]
-        raw = result["raw"]
-        last_error = parsing_error
-        last_raw_output = raw
+async def ainvoke_structured_with_retry(llm, schema, messages, max_attempts=2):
+    service = ModelService(Settings(llm_attempts=max_attempts), factory=lambda _: llm)
+    return await service.generate(schema, messages)
 
-        if attempt >= max_attempts:
-            break
-    raise StructuredOutputRetryError(
-        message=f"Structured output failed after {max_attempts} attempts.",
-        attempts=max_attempts,
-        last_error=last_error,
-        raw_output=last_raw_output,
-    )
+def invoke_structured_with_retry(llm, schema, messages, max_attempts=2):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(ainvoke_structured_with_retry(llm, schema, messages, max_attempts))
+    raise RuntimeError('Use await ainvoke_structured_with_retry inside an async node')

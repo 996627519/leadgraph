@@ -52,3 +52,22 @@ class CompanyScore(BaseModel):
     ]
 
     summary: str
+
+class CompanyScoreAssessment(BaseModel):
+
+    industry_fit: ScoreDimension
+    company_type_fit: ScoreDimension
+    geography_fit: ScoreDimension
+    capability_fit: ScoreDimension
+    company_size_fit: ScoreDimension
+
+    hard_constraint_pass: bool
+
+    failed_hard_constraints: list[str] = Field(default_factory=list)
+
+    missing_information: list[str] = Field(default_factory=list)
+
+
+    confidence: float = Field(ge=0, le=1)
+
+    summary: str

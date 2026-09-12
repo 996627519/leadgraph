@@ -6,7 +6,7 @@
 @Author ：zlh
 @Date ：2026-09-05 13:29 
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TargetProfile(BaseModel):
@@ -38,3 +38,11 @@ class TargetProfile(BaseModel):
     soft_preferences: list[str] = Field(default_factory=list)
     # 原始输入
     original_request: str
+    @model_validator(mode='after')
+    def valid_size_range(self):
+        low, high = self.company_size_min, self.company_size_max
+        if low is not None and low < 0 or high is not None and high < 0:
+            raise ValueError('工厂规模不能是负数')
+        if low is not None and high is not None and low > high:
+            raise ValueError('最大值需要大于最小值')
+        return self

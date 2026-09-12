@@ -10,13 +10,9 @@ from dataclasses import dataclass
 from typing import TypedDict, Annotated
 from pydantic import BaseModel, Field
 from backend.graph.states.company_search_task import CompanySearchTask
+from backend.graph.states.search_result import SearchResult, WorkerError
 from operator import add
 
-class SearchResult(BaseModel):
-    title: str
-    url: str
-    snippet: str
-    source: str | None = None
 
 class CompanyEvidence(BaseModel):
     title: str
@@ -48,7 +44,9 @@ class CompanyCandidateList(BaseModel):
     companies: list[CompanyCandidate] = Field(default_factory=list)
 
 
-class CompanySearchWorkerState(TypedDict):
+class CompanySearchWorkerState(TypedDict, total=False):
+    run_id: str
+    errors: Annotated[list[WorkerError], add]
     # 输入
     task: CompanySearchTask
 
@@ -65,20 +63,12 @@ class MergedCompany(BaseModel):
     website: str | None = None
     domain: str | None = None
 
-    locations: list[str] = Field(
-        default_factory=list
-    )
+    locations: list[str] = Field(default_factory=list)
 
-    descriptions: list[str] = Field(
-        default_factory=list
-    )
+    descriptions: list[str] = Field(default_factory=list)
 
-    matched_reasons: list[str] = Field(
-        default_factory=list
-    )
+    matched_reasons: list[str] = Field(default_factory=list)
 
-    evidence: list[CompanyEvidence] = Field(
-        default_factory=list
-    )
+    evidence: list[CompanyEvidence] = Field(default_factory=list)
 
     discovery_count: int = 1
