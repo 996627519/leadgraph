@@ -44,6 +44,6 @@ async def person_extract(state, services):
     if result.leads and not leads:
         errors = [WorkerError(stage='person_extract', task_id=state['task'].id,
             error_class='EvidenceValidationError', message='所有人候选人都未通过来源验证')]
-    print("===============================person_extract处理完毕===============================")
-    print(leads)
+    logger.info("===============================person_extract处理完毕===============================")
+    logger.info(leads)
     return {'lead_candidates': leads, 'errors': errors}

@@ -6,10 +6,9 @@
 @Author ：zlh
 @Date ：2026-09-07 16:03 
 """
-from backend.graph.llm.deepseek import get_structured_deepseek
-from langchain_core.messages import SystemMessage, HumanMessage
-
-from backend.graph.error.exception import StructuredOutputRetryError
+import asyncio
+from backend.config.settings import Settings
+from backend.service.model_service import ModelService
 
 
 # llm结构化输出错误，尝试重试

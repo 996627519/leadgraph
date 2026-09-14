@@ -14,6 +14,6 @@ logger = logging.getLogger(__name__)
 def person_merge(state):
     logger.info("进入person_merge")
     result = merge_leads(state.get('lead_candidates', []))
-    print("===============================person_merge处理完毕===============================")
-    print(result)
+    logger.info("===============================person_merge处理完毕===============================")
+    logger.info(result)
     return {'merged_leads': result}

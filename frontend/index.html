@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#17232e"><title>LeadGraph Studio · 让好生意，从对话开始</title><link rel="stylesheet" href="/assets/style.css"></head>
+<body>
+<div id="auth-root" class="auth-screen"></div>
+<div class="app-shell" hidden>
+<aside class="sidebar">
+  <a class="brand" href="#" aria-label="LeadGraph 首页"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>LeadGraph<small>STUDIO</small></span></a>
+  <div class="workspace-pill"><span class="workspace-avatar">L</span><span>我的工作空间<small>Personal workspace</small></span><span class="workspace-dot"></span></div>
+  <p class="nav-label">工作空间</p>
+  <nav><button data-nav="home" class="nav-item active"><span data-icon="grid"></span>概览<span class="nav-key">⌘</span></button><button data-nav="research" class="nav-item"><span data-icon="compass"></span>客户发现</button><button data-nav="review" class="nav-item"><span data-icon="users"></span>联系人审核<span id="side-count" class="count"></span></button><button data-nav="compose" class="nav-item"><span data-icon="mail"></span>邮件工作台</button></nav>
+  <div class="history-heading"><span class="nav-label">最近的研究</span><button id="refresh-history" class="icon-button" aria-label="刷新任务列表"><span data-icon="refresh"></span></button></div><div id="history" class="history"></div>
+  <div class="sidebar-bottom"><div class="sidebar-note"><span data-icon="spark"></span><strong>让每次联系，都更有准备。</strong><p>先了解，再对话。<br>把时间留给真正重要的机会。</p></div><button id="settings-button" class="settings-link"><span data-icon="settings"></span>连接与发送设置</button><div class="user"><span>ME</span><div><b id="account-name">我的账户</b><small>独立任务空间</small></div><button id="logout-button" class="settings-link">退出</button></div></div>
+</aside>
+<div class="main-shell"><header class="topbar"><button id="mobile-menu" class="icon-button mobile-only" aria-label="展开导航"><span data-icon="menu"></span></button><div class="breadcrumb">工作空间<span>/</span><b id="page-label">概览</b></div><div class="top-actions"><button id="usage-button" class="button small">账户余量</button><span class="local-status"><i></i>本地运行</span><button id="mode-button" class="mode-pill">演示模式<span data-icon="chevron"></span></button><button id="new-top" class="button small dark"><span data-icon="plus"></span>新建研究</button></div></header>
+<main id="main" tabindex="-1"><div class="loading-shell"><span class="spinner"></span>正在打开工作空间…</div></main>
+<footer>LeadGraph Studio <span>发现有依据，联系有温度。</span><span class="footer-right">Your next conversation starts here.</span></footer>
+</div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="modal"><div id="modal-content"></div></dialog>
+<script type="module" src="/assets/app.js"></script>
+</body></html>

@@ -41,7 +41,7 @@ async def person_enrichment(state, services):
         stop_reason=state.get('stop_reason') or 'attempt_limit',
         search_attempts=state.get('search_attempts', 0)
     )
-    print("===============================person_enrichment处理完毕===============================")
+    logger.info("===============================person_enrichment处理完毕===============================")
     result = [EnrichedLead(lead=state['lead'], **data)]
-    print(f"enriched_lead:{result}\nerrors:{errors}")
+    logger.info(f"enriched_lead:{result}\nerrors:{errors}")
     return {'enriched_lead': result, 'errors': errors}

@@ -10,7 +10,14 @@ from backend.graph.node.common import stable_id
 import logging
 logger = logging.getLogger(__name__)
 
-# 判断哪些需要enrich，哪些信息已充足
+"""
+判断哪些需要enrich，哪些信息不足
+信息不足判断依据（以下任意条件符合就成立）：
+1. 在职状态为former
+2. 没有evidence
+3. 没有职称
+4. 没有公司名
+"""
 def lead_gate(state, services):
     logger.info("进入lead_gate")
     eligible, skipped = [], []
@@ -27,7 +34,7 @@ def lead_gate(state, services):
     eligible.sort(key=lambda x: (-int(set(x.employment_statuses) == {'current'}), -len({e.url for e in x.evidence}), x.name.casefold(), tuple(sorted(x.company_names))))
     limit = services.settings.max_leads_to_enrich
     skipped.extend({'name': lead.name, 'reason': 'enrichment_limit'} for lead in eligible[limit:])
-    result = eligible[:limit]
-    print("===============================lead_gate处理完毕===============================")
-    print(result)
-    return {'selected_leads': result, 'skipped_leads': skipped}
+    eligible = eligible[:limit]
+    logger.info("===============================lead_gate处理完毕===============================")
+    logger.info(f"selected_leads: {eligible} \nskipped_leads: {skipped}")
+    return {'selected_leads': eligible, 'skipped_leads': skipped}

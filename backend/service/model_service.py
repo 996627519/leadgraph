@@ -12,6 +12,8 @@ from pydantic import ValidationError
 from backend.config.settings import Settings
 from backend.service.errors import ModelError, is_transient
 from backend.graph.llm.deepseek import get_deepseek
+import logging
+logger = logging.getLogger(__name__)
 
 
 class ModelService:
@@ -26,8 +28,9 @@ class ModelService:
 
     def _default_factory(self, schema):
         return get_deepseek(self.settings.timeout_seconds).with_structured_output(schema, include_raw=True)
-    
+
     async def generate(self, schema, messages):
+        logger.info(f"开始调用llm, schema：{schema.__name__}")
         if schema not in self._models:
             self._models[schema] = self.factory(schema)
         model = self._models[schema]

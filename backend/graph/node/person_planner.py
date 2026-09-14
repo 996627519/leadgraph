@@ -43,6 +43,6 @@ async def person_planner(state, services):
         tasks.append(task.model_copy(update={'id': stable_id(name, query), 'query': query, 'company_name': company.name,
             'company_website': company.website, 'company_domain': company.domain}))
     result = PersonSearchPlan(tasks=tasks)
-    print("===============================person_planner处理完毕===============================")
-    print(result)
+    logger.info("===============================person_planner处理完毕===============================")
+    logger.info(result)
     return {'person_search_tasks': result}

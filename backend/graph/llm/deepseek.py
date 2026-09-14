@@ -19,6 +19,7 @@ def get_deepseek(timeout=60):
     if not key:
         raise ModelError('未找到deepseek api key')
     return ChatDeepSeek(
+        extra_body={"thinking": {"type": "disabled"}},
         model=os.getenv('DEEPSEEK_MODEL', 'deepseek-v4-flash'),
         api_key=key,
         max_retries=0,

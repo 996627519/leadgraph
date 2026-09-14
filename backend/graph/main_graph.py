@@ -7,9 +7,12 @@
 @Date ：2026-09-05 16:47 
 """
 import asyncio
+import inspect
 import logging
 from functools import partial
 from uuid import uuid4
+import json
+from backend.persistend.checkpoint import open_checkpointer
 from langgraph.graph import StateGraph, START, END
 from backend.graph.states.lead_graph_state import LeadGraphState
 from backend.graph.states.person_enrichment_state import EnrichedLead
@@ -28,11 +31,19 @@ from backend.graph.node.lead_gate import lead_gate
 from backend.graph.node.common import worker_error
 from backend.service.errors import ServiceError, BudgetExhausted
 from backend.service.workflow_services import WorkflowServices
+from backend.config.settings import Settings
+
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 
-def create_graph(checkpointer=None, *, services=None):
+def create_graph(checkpointer=None, *, services=None, with_outreach=True, observer=None):
     services = services or WorkflowServices()
+    if with_outreach and checkpointer is None:
+        raise ValueError('人工审核图需要持久检查点；请在 async with open_checkpointer() 内创建并运行图。')
     company_graph = get_company_graph(services)
     person_graph = get_person_graph(services)
     enrichment_graph = get_enrichment_graph(services)
@@ -57,7 +68,8 @@ def create_graph(checkpointer=None, *, services=None):
             'selected_leads': [],
             'skipped_leads': [],
             'enriched_leads': [],
-            'errors': []}
+            'errors': []
+        }
 
     """
     通用错误防护机制，将service error转成状态更新，出错graph继续执行，只有到fatal=true的节点才结束运行
@@ -133,6 +145,15 @@ def create_graph(checkpointer=None, *, services=None):
         logger.info('leadgraph_finished run_id=%s status=%s search_calls=%s', state['run_id'], status, metrics['physical_calls'])
         return {'status': status, 'summary': summary or '服务失败，请查看 errors。', 'metrics': metrics, 'results': results}
 
+    # 观察节点开始，给前台显示实际运行阶段；不改变节点状态更新语义。
+    def observed(name, fn):
+        async def invoke(state):
+            if observer:
+                await observer(name, 'start')
+            result = fn(state)
+            return await result if inspect.isawaitable(result) else result
+        return invoke
+
     # 构建图
     builder = StateGraph(LeadGraphState)
     for name, fn in [
@@ -150,9 +171,12 @@ def create_graph(checkpointer=None, *, services=None):
         ('enrichment_work', enrichment_worker),
         ('finalize', finalize)
     ]:
-        builder.add_node(name, fn)
+        builder.add_node(name, observed(name, fn))
     builder.add_edge(START, 'initialize')
-    builder.add_edge('initialize', 'target_parser')
+    if with_outreach:
+        builder.add_conditional_edges('initialize', lambda s: 'demo_research' if s.get('mode') == 'demo' else 'target_parser')
+    else:
+        builder.add_edge('initialize', 'target_parser')
     builder.add_conditional_edges('target_parser', lambda s: 'company_planner' if s['status'] == 'running' else 'finalize')
     builder.add_conditional_edges('company_planner', send_company_work)
     builder.add_edge('company_work', 'company_merge')
@@ -164,14 +188,21 @@ def create_graph(checkpointer=None, *, services=None):
     builder.add_edge('person_merge', 'lead_gate')
     builder.add_conditional_edges('lead_gate', send_person_enrichment)
     builder.add_edge('enrichment_work', 'finalize')
-    builder.add_edge('finalize', END)
+    if with_outreach:
+        from backend.graph.outreach_graph import add_outreach_nodes
+        add_outreach_nodes(builder, services, observed)
+    else:
+        builder.add_edge('finalize', END)
     return builder.compile(checkpointer=checkpointer)
 
 
 # 运行入口
 async def run_pipeline(user_input, *, services=None, settings=None, checkpointer=None, thread_id=None):
+    if checkpointer is None:
+        async with open_checkpointer() as saver:
+            return await run_pipeline(user_input, services=services, settings=settings, checkpointer=saver, thread_id=thread_id)
     services = services or WorkflowServices(settings)
-    graph = create_graph(checkpointer, services=services)
+    graph = create_graph(checkpointer, services=services, with_outreach=False)
     run_id = uuid4().hex
     config = {'configurable': {'thread_id': thread_id or run_id}, 'recursion_limit': 100,
               'max_concurrency': max(services.settings.search_concurrency, services.settings.llm_concurrency)}
@@ -182,21 +213,10 @@ async def run_pipeline(user_input, *, services=None, settings=None, checkpointer
 
 
 async def test_graph():
-    checkpointer = MemorySaver()
-    graph = create_graph(checkpointer)
-    user_input = "我是一名销售，主要销售牛奶大型消毒设备，需要寻找英国地区，牛奶行业的公司人员，将设备销售给他们，尽量寻找对面有联系方式的人，比如领英平台的邮箱。"
-    task_id = "task001"
-    config = {
-        "configurable": {
-            "thread_id": task_id
-        }
-    }
-    async for event in graph.astream(
-            {
-                "user_input": user_input
-            },
-            config=config
-    ): print(event)
+    settings = Settings()
+    user_input = "我是一名销售，主要销售牛奶大型消毒设备，需要寻找英国地区，牛奶行业的公司采购经理、工程经理或生产负责人等等，你可以适当补充岗位。我需要将设备销售给他们，尽量寻找对面有联系方式的人，比如领英平台的邮箱。"
+    result = await run_pipeline(user_input=user_input, settings=settings)
+    print(json.dumps(result, default=lambda x: x.model_dump(), ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
     asyncio.run(test_graph())

@@ -10,7 +10,7 @@ from backend.graph.utils.evidence import evidence_sufficient
 import logging
 logger = logging.getLogger(__name__)
 
-
+# 判断证据是否充足，证据不足的需要enrich
 def assess_search_need(state):
     logger.info("进入company_extract")
     enough = evidence_sufficient(state['lead'], state['lead'].evidence)

@@ -33,6 +33,6 @@ async def company_score(state, services):
         hard_constraint_pass=passed,
         total_score=score,
         recommendation=get_company_recommendation(score, passed, assessment.confidence))
-    print("===============================company_score处理完毕===============================")
-    print(result)
+    logger.info("===============================company_score处理完毕===============================")
+    logger.info(result)
     return {'company_score': [result]}

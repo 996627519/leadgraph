@@ -22,7 +22,10 @@ from backend.graph.states.person_merge_state import MergedLead
 from backend.graph.states.person_enrichment_state import EnrichedLead
 
 
-class LeadGraphState(TypedDict, total=False):
+from backend.graph.states.outreach_state import OutreachState
+
+
+class LeadGraphState(OutreachState, total=False):
     run_id: str
     status: str
     summary: str

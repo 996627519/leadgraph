@@ -1,0 +1,4 @@
+# 在现有项目环境上安装本次增加的账户依赖。
+SQLAlchemy==2.0.52
+PyMySQL[rsa]==1.2.0
+argon2-cffi==25.1.0

@@ -119,6 +119,7 @@ def merge_leads(candidates):
     normalized=[normalize_lead_candidate(lead) for lead in candidates or [] if lead and lead.name.strip()]
     return [aggregate_lead_group(group) for group in group_lead_candidates(normalized)]
 
+# 根据候选人寻找目标公司
 def find_target_company(lead, state):
     names={normalize_company_name(x) for x in lead.target_companies}
     matches=[r.scored_company.company for r in state.get('ranked_companies', [])
