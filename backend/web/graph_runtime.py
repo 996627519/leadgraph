@@ -9,6 +9,7 @@ HTTP 与图之间的适配：只驱动图和投影展示数据，不执行外联
 """
 import asyncio
 import logging
+import traceback
 from copy import deepcopy
 from langgraph.types import Command
 from backend.graph.main_graph import create_graph
@@ -36,6 +37,14 @@ NODE_STAGES = {
 }
 
 
+def log_failure(run_id, phase, exc):
+    # 不输出异常文本或局部变量，避免 SQL 参数、API 密钥进入日志。
+    frames = traceback.extract_tb(exc.__traceback__)
+    location = f'{frames[-1].filename}:{frames[-1].lineno}' if frames else 'unknown'
+    logging.getLogger(__name__).error('Graph task failed run_id=%s phase=%s exception=%s location=%s',
+                                     run_id, phase, type(exc).__name__, location)
+
+
 class GraphRuntime:
     def __init__(self, store, checkpointer, email, *, services_factory=None, demo_delay=.65):
         self.store, self.checkpointer, self.email = store, checkpointer, email
@@ -60,7 +69,11 @@ class GraphRuntime:
         async def observer(name, action):
             if name in NODE_STAGES:
                 await emit(*NODE_STAGES[name])
-        return create_graph(self.checkpointer, services=services, observer=observer), services
+        try:
+            return create_graph(self.checkpointer, services=services, observer=observer), services
+        except BaseException:
+            await services.search.aclose()
+            raise
 
     async def snapshot(self, run_id):
         graph, services = await self.graph(run_id)
@@ -121,8 +134,11 @@ class GraphRuntime:
         VALIDATORS[kind](snapshot.values, payload)
 
     async def _drive(self, run_id, graph_input):
-        graph, services = await self.graph(run_id)
+        services = None
+        phase = 'initialize'
         try:
+            graph, services = await self.graph(run_id)
+            phase = 'execute'
             async for update in graph.astream(graph_input, self.config(run_id), stream_mode='updates'):
                 # 只投影已经由图节点提交的输出，使长任务过程中也能显示已完成部分。
                 for name, values in update.items():
@@ -138,12 +154,20 @@ class GraphRuntime:
             await asyncio.to_thread(self.store.mutate, run_id, lambda r: r.update(status='interrupted', notice='执行已停止，检查点已保留。'))
             raise
         except Exception as exc:
-            logging.getLogger(__name__).error('Graph execution failed: %s', type(exc).__name__)
-            await self.sync(run_id)
+            log_failure(run_id, phase, exc)
+            try:
+                await self.sync(run_id)
+            except Exception as sync_error:
+                # 图模块缺失时，读取检查点也可能失败；仍须将任务标为可恢复。
+                log_failure(run_id, 'sync_after_error', sync_error)
             await asyncio.to_thread(self.store.mutate, run_id, lambda r: r.update(status='interrupted', notice='图执行未完成，请检查服务配置后恢复。'))
             return await asyncio.to_thread(self.store.get, run_id)
         finally:
-            await services.search.aclose()
+            if services is not None:
+                try:
+                    await services.search.aclose()
+                except Exception as close_error:
+                    log_failure(run_id, 'close', close_error)
 
     def spawn(self, run_id, graph_input):
         async def run():
@@ -154,7 +178,9 @@ class GraphRuntime:
         def done(finished):
             self.tasks.pop(run_id, None)
             if not finished.cancelled():
-                finished.exception()
+                error = finished.exception()
+                if error is not None:
+                    log_failure(run_id, 'background', error)
         task.add_done_callback(done)
 
     async def resume(self, run_id, kind, payload, *, background_status=None):

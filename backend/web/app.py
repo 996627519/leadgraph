@@ -64,6 +64,13 @@ def create_app(db_path=None, *, database=None, quota_service=None, services_fact
     quota = quota_service or QuotaService()
     secure_cookie = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
     allow_registration = os.getenv('ALLOW_REGISTRATION', 'true').lower() == 'true'
+    max_active_runs = int(os.getenv('LEADGRAPH_MAX_ACTIVE_RUNS', '3'))
+    if not 1 <= max_active_runs <= 3:
+        raise ValueError('LEADGRAPH_MAX_ACTIVE_RUNS 必须为 1 到 3。')
+    allowed_hosts = [h.strip() for h in os.getenv('LEADGRAPH_ALLOWED_HOSTS',
+        'localhost,127.0.0.1,[::1],testserver').split(',') if h.strip()]
+    if not allowed_hosts or any(h == '*' or '://' in h or '/' in h for h in allowed_hosts):
+        raise ValueError('LEADGRAPH_ALLOWED_HOSTS 请填写明确的 IP 或域名，不包含协议或路径。')
 
     @asynccontextmanager
     async def lifespan(app):
@@ -82,7 +89,7 @@ def create_app(db_path=None, *, database=None, quota_service=None, services_fact
             await asyncio.to_thread(store.close)
 
     app = FastAPI(title='LeadGraph Studio', lifespan=lifespan, docs_url=None, redoc_url=None)
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', '[::1]', 'testserver'])
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
     app.state.store = store
     app.state.auth = auth
     mount_auth(app, auth, secure=secure_cookie, allow_registration=allow_registration)
@@ -148,7 +155,7 @@ def create_app(db_path=None, *, database=None, quota_service=None, services_fact
     async def new_run(data: NewRun, request: Request):
         async with admission_lock:
             runtime = app.state.runtime
-            if len(runtime.tasks) >= 3:
+            if len(runtime.tasks) >= max_active_runs:
                 raise HTTPException(429, '请等待一个运行中的任务完成。')
             if not data.query.strip():
                 raise ValueError('请输入具体要求。')
@@ -238,6 +245,14 @@ def create_app(db_path=None, *, database=None, quota_service=None, services_fact
                     break
                 await asyncio.sleep(.4)
         return StreamingResponse(stream(), media_type='text/event-stream', headers={'X-Accel-Buffering': 'no'})
+
+    @app.get('/healthz', include_in_schema=False)
+    async def health():
+        try:
+            await asyncio.to_thread(store.check)
+        except Exception:
+            return JSONResponse({'status': 'unavailable'}, status_code=503)
+        return {'status': 'ok'}
 
     @app.get('/')
     async def index():

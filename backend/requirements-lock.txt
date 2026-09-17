@@ -68,10 +68,13 @@ uvicorn==0.52.4
 websockets==16.1.1
 xxhash==4.0.1
 zstandard==0.25.0
-
-# Account database and password hashing
 SQLAlchemy==2.0.52
 PyMySQL[rsa]==1.2.0
 argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
 greenlet==3.5.5
+
+# Web server and persistent LangGraph checkpoints
+fastapi==0.141.1
+aiosqlite==0.22.1
+langgraph-checkpoint-sqlite==3.1.1
