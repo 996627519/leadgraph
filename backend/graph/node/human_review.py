@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 def wait_for_review(state, kind, validate):
     error = ''
     while True:
-        # GraphInterrupt 由 LangGraph 捕获，不能放到宽泛的 except 中吞掉。
         answer = interrupt({'kind': kind, 'error': error,
                             'leads': state.get('review_leads', []),
                             'contacts': state.get('contacts', {}),
