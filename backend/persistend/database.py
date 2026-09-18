@@ -10,22 +10,31 @@ from backend.persistend.studio_store import now
 
 metadata = MetaData()
 users = Table('lg_users', metadata,
-    Column('id', String(32), primary_key=True), Column('username', String(64), nullable=False, unique=True),
-    Column('password_hash', String(255), nullable=False), Column('active', Boolean, nullable=False, default=True),
-    Column('created_at', String(40), nullable=False))
+              Column('id', String(32), primary_key=True),
+                   Column('username', String(64), nullable=False, unique=True),
+                   Column('password_hash', String(255), nullable=False),
+                   Column('active', Boolean, nullable=False, default=True),
+                   Column('created_at', String(40), nullable=False)
+        )
 sessions = Table('lg_sessions', metadata,
-    Column('token_hash', String(64), primary_key=True),
-    Column('user_id', String(32), ForeignKey('lg_users.id'), nullable=False, index=True),
-    Column('expires_at', BigInteger, nullable=False, index=True))
+              Column('token_hash', String(64), primary_key=True),
+                   Column('user_id', String(32), ForeignKey('lg_users.id'), nullable=False, index=True),
+                   Column('expires_at', BigInteger, nullable=False, index=True)
+        )
 runs = Table('lg_runs', metadata,
-    Column('id', String(32), primary_key=True),
-    Column('user_id', String(32), ForeignKey('lg_users.id'), nullable=False, index=True),
-    Column('created_at', String(40), nullable=False, index=True), Column('payload', JSON, nullable=False))
+             Column('id', String(32), primary_key=True),
+                  Column('user_id', String(32), ForeignKey('lg_users.id'), nullable=False, index=True),
+                  Column('created_at', String(40), nullable=False, index=True),
+                  Column('payload', JSON, nullable=False)
+        )
 deliveries = Table('lg_deliveries', metadata,
-    Column('run_id', String(32), ForeignKey('lg_runs.id'), primary_key=True),
-    Column('draft_id', String(32), primary_key=True), Column('recipient', String(254), nullable=False),
-    Column('digest', String(64), nullable=False), Column('result', JSON, nullable=False),
-    UniqueConstraint('run_id', 'recipient', name='uq_run_recipient'))
+            Column('run_id', String(32), ForeignKey('lg_runs.id'), primary_key=True),
+                 Column('draft_id', String(32), primary_key=True),
+                 Column('recipient', String(254), nullable=False),
+                 Column('digest', String(64), nullable=False),
+                 Column('result', JSON, nullable=False),
+                 UniqueConstraint('run_id', 'recipient', name='uq_run_recipient')
+        )
 
 
 def mysql_engine():
