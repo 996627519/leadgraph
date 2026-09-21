@@ -10,6 +10,7 @@ import os
 import uvicorn
 from backend.web.app import create_app
 
+# 主入口
 if __name__ == '__main__':
     uvicorn.run(create_app(), host='127.0.0.1', port=int(os.getenv('LEADGRAPH_PORT', '8080')),
                 workers=1, log_level='warning')

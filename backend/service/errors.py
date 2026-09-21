@@ -24,6 +24,7 @@ class ModelError(ServiceError):
     pass
 
 
+# 判断一个错误是不是暂时性的，暂时性的可以重试
 def is_transient(error):
     status = getattr(error, 'status_code', None)
     response = getattr(error, 'response', None)

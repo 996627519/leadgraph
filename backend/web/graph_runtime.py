@@ -49,8 +49,10 @@ class GraphRuntime:
     def __init__(self, store, checkpointer, email, *, services_factory=None, demo_delay=.65):
         self.store, self.checkpointer, self.email = store, checkpointer, email
         self.services_factory, self.demo_delay = services_factory, demo_delay
+        # 正在执行的后台任务和这个业务任务对应的异步锁
         self.tasks, self.locks = {}, {}
 
+    # 统一配置，recursion_limit用于限制图执行步数，防止流程无限循环，max_concurrency为图的并发上限
     def config(self, run_id):
         return {'configurable': {'thread_id': run_id}, 'recursion_limit': 100, 'max_concurrency': 4}
 

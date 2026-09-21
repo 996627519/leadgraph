@@ -7,7 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.persistend.database import Database
 from backend.service.auth_service import AuthService
 
-
+"""
+命令行管理入口，创建数据库、初始化表、检查连接或者创建用户。
+"""
 def main():
     parser = argparse.ArgumentParser(description='LeadGraph 账户数据库初始化')
     parser.add_argument('command', choices=['init-db', 'create-user', 'check-db'])

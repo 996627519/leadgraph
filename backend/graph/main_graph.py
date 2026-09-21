@@ -73,6 +73,8 @@ def create_graph(checkpointer=None, *, services=None, with_outreach=True, observ
 
     """
     通用错误防护机制，将service error转成状态更新，出错graph继续执行，只有到fatal=true的节点才结束运行
+    fatal=true并不会直接结束图，只是写入failed，后面的路由检查再跳转到finalize
+    guarded只捕获ServiceError及其子类，普通的TypeError和KeyError等仍然会向外抛出
     """
     def guarded(fn, *, output=None, fatal=False):
         async def call(state):
@@ -126,7 +128,7 @@ def create_graph(checkpointer=None, *, services=None, with_outreach=True, observ
             return {'enriched_leads': [fallback], 'errors': [worker_error('enrichment_worker', state['lead'].name, exc)]}
 
     """
-    1. 结果排序，按lead.name小写排序
+    1. 结果排序，按lead.name和company.name小写排序
     2. 状态裁决，failed、needs_input保留状态，有错误+有结果 partial，有错误+无结果 failed，无错误+有结果 completed，无错误+无结果 completed_empty
     3. 指标汇总，从searchservice.metrics(run_id)拿到搜索指标，（physical_calls / cache_hits 等），再补上 LLM 调用数、公司数、合并线索数、补全线索数。
     4. summary生成，失败或需要输入时用上游给的summary，否则自动拼一段中文摘要
