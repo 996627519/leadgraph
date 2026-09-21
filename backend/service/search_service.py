@@ -87,7 +87,7 @@ class TavilyMCPProvider:
                 names = {requested} if requested else {'tavily_search', 'tavily-search'}
                 matches = [tool for tool in available if tool.name in names]
                 if len(matches) != 1:
-                    raise SearchError('未配置TAVILY_TOOL_NAME，有多个tool可用')
+                    raise SearchError('未找到指定工具，请确保TAVILY_TOOL_NAME配置正确')
                 self._tool = matches[0]
         return await self._tool.ainvoke(arguments)
 
