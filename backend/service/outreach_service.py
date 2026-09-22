@@ -26,6 +26,7 @@ class MailText(BaseModel):
     body: str = Field(min_length=1, max_length=12000)
 
 
+# 从搜索内容中提取邮箱
 def extract_emails(results, name, company):
     found = {}
     for source in results:
@@ -46,6 +47,7 @@ def extract_emails(results, name, company):
     return list(found.values())
 
 
+# 批量查询选中人的邮箱
 async def lookup_contacts(leads, *, demo=False, service=None, progress=None):
     service = service or SearchService(Settings(max_search_calls=len(leads)*2, search_concurrency=3))
     run_id = uuid4().hex
@@ -84,6 +86,7 @@ async def lookup_contacts(leads, *, demo=False, service=None, progress=None):
         await service.aclose()
 
 
+# 并发生成邮件。
 async def generate_drafts(leads, contacts, brief, *, demo=False, model=None, progress=None):
     model = model or ModelService(Settings(llm_concurrency=3))
     semaphore = asyncio.Semaphore(3)
@@ -110,6 +113,7 @@ async def generate_drafts(leads, contacts, brief, *, demo=False, model=None, pro
             if progress:
                 await progress(draft)
             return draft
+    # 所有任务同时开始，最后按传入的顺序收集起来
     results = await asyncio.gather(*(generate(lead) for lead in leads), return_exceptions=True)
     if any(isinstance(x, Exception) for x in results):
         raise RuntimeError('Some drafts failed to generate')
@@ -117,11 +121,12 @@ async def generate_drafts(leads, contacts, brief, *, demo=False, model=None, pro
 
 
 class OutreachService:
-    """图节点的外部依赖；沿用已有搜索与模型服务，不承担图路由。"""
+    # 将查询结果的列表转换为lead_id: 联系方式记录
     async def contacts(self, leads, *, demo=False):
         results = await lookup_contacts(leads, demo=demo)
         return {item['lead_id']: item for item in results}
 
+    # 保留部分成功的草稿
     async def write(self, leads, contacts, brief, *, demo=False, model=None):
         completed = []
         async def collect(draft):

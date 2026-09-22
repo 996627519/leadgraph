@@ -20,11 +20,17 @@ from email.utils import formatdate, make_msgid
 
 EMAIL = re.compile(r'^[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$')
 
-
+"""
+1. 校验类型
+2. 校验长度
+3. 检查基本邮件格式
+4. 排除连续两个点
+"""
 def valid_email(value):
     return isinstance(value, str) and len(value) <= 254 and bool(EMAIL.fullmatch(value)) and '..' not in value
 
 
+# 读取 SMTP 主机、端口、账号、密码、发件人和连接方式。如果端口不是合法整数，先变成 0，后续就会判定配置未就绪。
 def mail_config():
     try:
         port = int(os.getenv('SMTP_PORT', '465'))
@@ -37,11 +43,22 @@ def mail_config():
     }
 
 
+# 检查必要配置是否齐全，端口是否有效，连接模式是否支持
 def mail_ready():
     c = mail_config()
     return bool(c['host'] and 1 <= c['port'] <= 65535 and c['username'] and c['password'] and valid_email(c['from']) and c['security'] in {'ssl', 'starttls'})
 
-
+"""
+SMTP操作
+检查配置
+检查地址和主题
+检查发邮件地址是否和草稿一致
+构造EmailMessage
+建立加密连接
+登录
+提交邮件
+返回发送结果
+"""
 def submit_mail(draft, *, demo=False, smtp_factory=None):
     if demo:
         return {'status': 'simulated', 'message_id': make_msgid(domain='demo.invalid')}
@@ -86,8 +103,8 @@ def submit_mail(draft, *, demo=False, smtp_factory=None):
                 pass
 
 
+# 检查准备发送的草稿和审核通过的那一份是否相同
 def draft_digest(draft):
-    """审核绑定完整内容，防止发送节点收到被悄悄改过的草稿。"""
     fields = {key: draft[key] for key in ('id', 'revision', 'sender', 'recipient', 'subject', 'body')}
     return hashlib.sha256(json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -108,11 +125,28 @@ class EmailService:
             PRIMARY KEY (run_id, draft_id), UNIQUE (run_id, recipient))''')
         return db
 
+    # 图节点发送邮件的入口
     async def send_once(self, run_id, draft, approval, *, demo=False):
         if not approval or approval != draft_digest(draft):
             raise ValueError('审核内容与当前邮件不一致，禁止发送。')
         return await asyncio.to_thread(self._submit_once, run_id, dict(draft), approval, demo)
 
+    """
+    同一任务 + 同一草稿：不能重复领取
+    同一任务 + 同一收件地址：不能重复领取
+    
+    先写入 sending 并提交事务
+    ↓
+    再调用 SMTP
+    ↓
+    最后写入 sent / failed / unknown
+    
+    如果再遇到相同草稿：
+    - 已有确定结果：返回旧结果。
+    - 已经是 sending 但没有最终结果：提示不确定，不自动重发。
+    - 内容版本不一致：拒绝。
+    - 同一任务里相同收件人已有其他记录：拒绝。
+    """
     def _submit_once(self, run_id, draft, approval, demo):
         if self.ledger is not None:
             previous = self.ledger.claim_delivery(run_id, draft, approval)

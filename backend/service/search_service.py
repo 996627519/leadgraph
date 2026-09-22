@@ -92,7 +92,7 @@ class TavilyMCPProvider:
         return await self._tool.ainvoke(arguments)
 
 
-# 可观测性数据类
+# 统计数据
 @dataclass
 class SearchMetrics:
     # 真实打到搜索引擎的次数
@@ -116,6 +116,8 @@ class SearchService:
         # 并发上限
         self._semaphore = asyncio.Semaphore(self.settings.search_concurrency)
         # LRU + TTL 缓存
+        # 有效期：900 秒
+        # 最多条目：256
         self._cache = OrderedDict()
         # 进行中的请求（同 key 合并）
         self._inflight = {}
@@ -125,6 +127,13 @@ class SearchService:
     def metrics(self, run_id):
         return asdict(self._metrics.setdefault(run_id, SearchMetrics()))
 
+    """
+    query: 搜索词
+    run_id: 归属于哪个运行
+    stage: 属于公司搜索，人物搜索，还是补全
+    max_results: 一次最多返回多少结果
+    search_depth: 搜索深度
+    """
     async def search(self, query, *, run_id, stage='search', max_results=5, search_depth='basic'):
         query = ' '.join(str(query).split())
         if not query:
@@ -154,10 +163,12 @@ class SearchService:
         task.add_done_callback(completed)
         return copy.deepcopy(await asyncio.shield(task))
 
+    # 实际搜索入口
     async def _request(self, key, run_id, stage):
         metrics = self._metrics[run_id]
         for attempt in range(self.settings.search_attempts):
             try:
+                # 并发上限为4
                 async with self._semaphore:
                     if metrics.physical_calls >= self.settings.max_search_calls:
                         metrics.budget_exhausted = True
@@ -176,11 +187,16 @@ class SearchService:
                 raise
             except Exception as exc:
                 metrics.failures += 1
+                # 最多重试两次
                 if is_transient(exc) and attempt + 1 < self.settings.search_attempts:
                     await asyncio.sleep(min(.25 * 2 ** attempt, 2))
                     continue
                 raise SearchError(f'搜索失败 ({type(exc).__name__})') from None
 
+    """
+    收尾方法
+    负责：找出尚未完成的搜索任务取消它们然后等待取消结束
+    """
     async def aclose(self):
         pending = list(self._inflight.values())
         for task in pending:
