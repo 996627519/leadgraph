@@ -8,6 +8,7 @@ import httpx
 from backend.persistend.studio_store import now
 
 
+# 统一金额数字显示
 def amount(value):
     if value is None or isinstance(value, bool):
         return None
@@ -17,14 +18,14 @@ def amount(value):
     except InvalidOperation:
         return None
 
-
+# 计算剩余额度
 def budget(usage, limit):
     used, cap = amount(usage), amount(limit)
     # 缺少上限时保留未知，不能解释为 0 或无限。
     remaining = str(max(Decimal(0), Decimal(cap)-Decimal(used))) if used is not None and cap is not None else None
     return {'used': used, 'limit': cap, 'remaining': remaining}
 
-
+# 整理deepseek币种
 def parse_deepseek(data):
     balances = []
     for entry in data.get('balance_infos', []):
@@ -34,7 +35,7 @@ def parse_deepseek(data):
         raise ValueError('No balance data')
     return {'balances': balances, 'is_available': data.get('is_available')}
 
-
+# 整理tavily币种
 def parse_tavily(data):
     key, account = data.get('key'), data.get('account')
     if not isinstance(key, dict) or not isinstance(account, dict):
@@ -51,6 +52,7 @@ class QuotaService:
         self.ttl, self.clock = max(75, ttl), clock
         self.cache, self.lock = None, asyncio.Lock()
 
+    # 查询单个供应商
     async def _one(self, client, provider, url, key, parser):
         if not key:
             return {'provider': provider, 'status': 'not_configured', 'message': '尚未配置 API Key', 'checked_at': now()}
@@ -65,6 +67,7 @@ class QuotaService:
             message = '额度暂时无法读取，请稍后刷新'
         return {'provider': provider, 'status': 'unavailable', 'message': message, 'checked_at': now()}
 
+    # 并行查询两个供应商，并缓存结果
     async def get(self):
         async with self.lock:
             if self.cache and self.clock() < self.cache[0]:
