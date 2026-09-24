@@ -387,9 +387,3 @@ docker compose logs --tail=100 app
 - SMTP / SSL / STARTTLS
 - 原生 HTML、CSS、JavaScript、SSE
 - Docker Compose、Caddy
-
-## 相关文档
-
-- [本地账号、MySQL、额度与 checkpoint](docs/ACCOUNT_SETUP.md)
-- [Alibaba Cloud Linux / Docker Compose 部署](docs/SERVER_DEPLOY.md)
-- [完整学习文档与代码解析包](LeadGraph-完整学习文档-含代码全量解析.zip)
